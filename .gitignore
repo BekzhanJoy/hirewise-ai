@@ -1,0 +1,11 @@
+.next
+node_modules
+tsconfig.tsbuildinfo
+.DS_Store
+
+.claude
+.zoer
+
+# local env files
+.env*
+!.env.example

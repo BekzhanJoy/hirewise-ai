@@ -1,0 +1,60 @@
+{
+  "users": [
+    {
+      "id": "6517dd43-6dd3-4bbc-bc9a-d66258fa3ed5",
+      "email": "user@test.com",
+      "password_hash": "470c35f92dc4b71ea05bdb78842069a4:0fc2ee6ada34e19453a211cc019c613dab48d3dccafaf8c618f16ab12800ffc557107f509f177602f95a4dde2e8365f8332c76942c610f35d760e923782d1d4e",
+      "full_name": "Тест",
+      "created_at": "2026-03-27T14:30:05.374Z"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "6517dd43-6dd3-4bbc-bc9a-d66258fa3ed5",
+      "email": "user@test.com",
+      "full_name": "Тест",
+      "created_at": "2026-03-27T14:30:05.374Z",
+      "updated_at": "2026-03-27T14:30:05.374Z"
+    }
+  ],
+  "user_settings": [
+    {
+      "user_id": "6517dd43-6dd3-4bbc-bc9a-d66258fa3ed5",
+      "auto_save_resumes": true,
+      "color_scheme": "emerald",
+      "language": "en",
+      "max_storage_mb": 500,
+      "created_at": "2026-03-27T14:30:05.374Z",
+      "updated_at": "2026-03-27T14:30:05.374Z"
+    }
+  ],
+  "resumes": [
+    {
+      "id": "bcefab06-e409-4297-b9cb-67845f842f37",
+      "user_id": "6517dd43-6dd3-4bbc-bc9a-d66258fa3ed5",
+      "file_name": "CV.pdf",
+      "file_url": "/api/files/6517dd43-6dd3-4bbc-bc9a-d66258fa3ed5/1774622009402-6b47d766-1954-4cfd-938a-96453c4e4827.pdf",
+      "file_type": "application/pdf",
+      "file_size": 52500,
+      "extracted_text": "[Extracted text from CV.pdf]\n\nCandidate Name: Local Candidate\nEmail: candidate@example.com\nPhone: +1 555 123 4567\n\nSummary:\nExperienced specialist with strong communication, organization, and problem-solving skills.\n\nSkills:\nCommunication, Leadership, Teamwork, Project Management, Analytical Thinking",
+      "stored_name": "1774622009402-6b47d766-1954-4cfd-938a-96453c4e4827.pdf",
+      "created_at": "2026-03-27T14:33:29.408Z"
+    }
+  ],
+  "scan_results": [
+    {
+      "id": "46da422a-12b9-42f1-97b6-e3e117ed7986",
+      "user_id": "6517dd43-6dd3-4bbc-bc9a-d66258fa3ed5",
+      "resume_id": "bcefab06-e409-4297-b9cb-67845f842f37",
+      "keywords": [
+        "Java",
+        "Nosql",
+        "Sql"
+      ],
+      "match_score": 0,
+      "matched_keywords": [],
+      "is_best_match": true,
+      "created_at": "2026-03-27T14:33:47.596Z"
+    }
+  ]
+}
