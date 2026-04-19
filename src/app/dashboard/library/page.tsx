@@ -11,6 +11,12 @@ import { FileText, File, Trash2, Search, FileArchive, RefreshCw, Download } from
 import { toast } from 'sonner'
 import { useAppPreferences } from '@/components/AppPreferencesProvider'
 
+interface ResumeProfile {
+  skills?: string[]
+  education_level?: string | null
+  years_experience?: number | null
+}
+
 interface Resume {
   id: string
   user_id: string
@@ -20,6 +26,7 @@ interface Resume {
   file_size: number
   created_at: string
   best_match_score?: number
+  resume_profile?: ResumeProfile
 }
 
 type SortOption = 'date_desc' | 'date_asc' | 'score_desc' | 'score_asc'
@@ -93,7 +100,8 @@ export default function LibraryPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString(language, { month: 'short', day: 'numeric', year: 'numeric' })
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString(language, { month: 'short', day: 'numeric', year: 'numeric' })
 
   const getFileIcon = (type: string) => {
     if (type.includes('pdf')) return <FileText className="w-8 h-8 text-red-400" />
@@ -124,9 +132,18 @@ export default function LibraryPage() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-app" />
-          <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t('searchResumes')} className="pl-10 bg-surface-2 border-app text-accent" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('searchResumes')}
+            className="pl-10 bg-surface-2 border-app text-accent"
+          />
         </div>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)} className="px-3 py-2 rounded-md text-sm outline-none bg-surface-2 border border-app text-accent">
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as SortOption)}
+          className="px-3 py-2 rounded-md text-sm outline-none bg-surface-2 border border-app text-accent"
+        >
           <option value="date_desc">{t('newestFirst')}</option>
           <option value="date_asc">{t('oldestFirst')}</option>
           <option value="score_desc">{t('highestScore')}</option>
@@ -163,10 +180,39 @@ export default function LibraryPage() {
                 </div>
 
                 <div className="text-xs text-muted-app">{t('uploadedOn')}: {formatDate(resume.created_at)}</div>
-                {typeof resume.best_match_score === 'number' && <div className="text-sm text-highlight">{t('bestScore')}: {resume.best_match_score}%</div>}
+                {typeof resume.best_match_score === 'number' && (
+                  <div className="text-sm text-highlight">{t('bestScore')}: {resume.best_match_score}%</div>
+                )}
+
+                {(resume.resume_profile?.skills?.length || resume.resume_profile?.education_level || typeof resume.resume_profile?.years_experience === 'number') && (
+                  <div className="space-y-2">
+                    {resume.resume_profile?.skills?.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {resume.resume_profile.skills.slice(0, 5).map((skill) => (
+                          <Badge key={skill} variant="secondary" className="bg-surface-soft text-accent">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-app">
+                      {resume.resume_profile?.education_level && (
+                        <span>{t('educationDetected')}: {resume.resume_profile.education_level}</span>
+                      )}
+                      {typeof resume.resume_profile?.years_experience === 'number' && (
+                        <span>{t('experienceDetected')}: {resume.resume_profile.years_experience}y</span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-2">
-                  <a href={resume.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-surface-soft text-accent text-sm">
+                  <a
+                    href={resume.file_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-surface-soft text-accent text-sm"
+                  >
                     <Download className="w-4 h-4" /> {t('open')}
                   </a>
                 </div>

@@ -1,21 +1,35 @@
+from typing import List, Optional, Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List
+
 from db import scan_resumes
 
 router = APIRouter()
 
+
 class ScanRequest(BaseModel):
     userId: str
-    keywords: List[str]
+    keywords: Optional[List[str]] = None
+    jobDescription: Optional[str] = None
+    mode: Literal['keywords', 'job_description'] = 'keywords'
 
-@router.post("/scans")
+
+@router.post('/scans')
 async def post_scans(req: ScanRequest):
-    if not req.keywords:
-        raise HTTPException(status_code=400, detail="At least one keyword required")
     try:
-        results = scan_resumes(req.userId, [k.strip() for k in req.keywords if k.strip()])
-        return {"results": results}
+        if req.mode == 'job_description':
+            if not (req.jobDescription or '').strip():
+                raise HTTPException(status_code=400, detail='Job description is required')
+            results = scan_resumes(req.userId, job_description=req.jobDescription, mode='job_description')
+            return {'results': results}
+
+        keywords = [k.strip() for k in (req.keywords or []) if k.strip()]
+        if not keywords:
+            raise HTTPException(status_code=400, detail='At least one keyword required')
+        results = scan_resumes(req.userId, keywords=keywords, mode='keywords')
+        return {'results': results}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
