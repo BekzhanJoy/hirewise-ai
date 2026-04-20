@@ -2,7 +2,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
@@ -12,11 +11,22 @@ from datetime import datetime
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from docx import Document
 from pypdf import PdfReader
+from encryption import (
+    decrypt_blob,
+    decrypt_json_payload,
+    encrypt_blob,
+    encrypt_json_payload,
+    is_encrypted_blob,
+    is_encrypted_json_payload,
+    load_or_create_key,
+)
 
 DATA_DIR = Path.cwd().parent.parent / 'local-data'
 UPLOADS_DIR = DATA_DIR / 'uploads'
 DB_FILE = DATA_DIR / 'db.json'
 ROOT_DIR = Path(__file__).resolve().parents[1]
+ENCRYPTION_KEY = load_or_create_key(DATA_DIR)
+STORAGE_READY = False
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
@@ -96,23 +106,64 @@ def default_db() -> Dict[str, List[Any]]:
     }
 
 
+def _load_plain_or_encrypted_db() -> Dict[str, Any]:
+    raw_text = DB_FILE.read_text(encoding='utf-8')
+    payload = json.loads(raw_text)
+    if is_encrypted_json_payload(payload):
+        return decrypt_json_payload(payload, ENCRYPTION_KEY)
+    return payload
+
+
+def _write_encrypted_db(db: Dict[str, Any]) -> None:
+    payload = encrypt_json_payload(db, ENCRYPTION_KEY)
+    DB_FILE.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+
+
+def _migrate_existing_uploads() -> None:
+    if not UPLOADS_DIR.exists():
+        return
+    for file_path in UPLOADS_DIR.rglob('*'):
+        if not file_path.is_file():
+            continue
+        try:
+            current = file_path.read_bytes()
+            if is_encrypted_blob(current):
+                continue
+            file_path.write_bytes(encrypt_blob(current, ENCRYPTION_KEY))
+        except Exception:
+            continue
+
+
 def ensure_local_storage():
+    global STORAGE_READY
+    if STORAGE_READY:
+        return
+
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     if not DB_FILE.exists():
-        with open(DB_FILE, 'w', encoding='utf-8') as f:
-            json.dump(default_db(), f, indent=2)
+        _write_encrypted_db(default_db())
+        STORAGE_READY = True
+        return
+
+    try:
+        db = _load_plain_or_encrypted_db()
+    except Exception as exc:
+        raise RuntimeError(
+            'Failed to open local database. The encryption key may be missing or different from the original key.'
+        ) from exc
+    _write_encrypted_db(db)
+    _migrate_existing_uploads()
+    STORAGE_READY = True
 
 
 def read_db():
     ensure_local_storage()
-    with open(DB_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return _load_plain_or_encrypted_db()
 
 
 def write_db(db):
     ensure_local_storage()
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(db, f, indent=2, ensure_ascii=False)
+    _write_encrypted_db(db)
 
 
 def hash_password(password: str) -> str:
@@ -479,9 +530,10 @@ def save_resume_from_file(user_id: str, file_path: str, file_name: str, file_typ
     user_dir = UPLOADS_DIR / user_id
     user_dir.mkdir(parents=True, exist_ok=True)
     stored_path = user_dir / sanitize_name(stored_name)
-    shutil.copy2(file_path, stored_path)
 
-    extracted_text = clean_extracted_text(extract_text_from_file(str(stored_path), file_type, file_name))
+    extracted_text = clean_extracted_text(extract_text_from_file(file_path, file_type, file_name))
+    encrypted_bytes = encrypt_blob(Path(file_path).read_bytes(), ENCRYPTION_KEY)
+    stored_path.write_bytes(encrypted_bytes)
     resume_profile = parse_resume_profile(extracted_text)
 
     resume = {
@@ -834,7 +886,7 @@ def read_stored_file(slug: List[str]):
     file_path = UPLOADS_DIR / Path(*slug)
     if not file_path.exists():
         raise ValueError('File not found')
-    return file_path.read_bytes()
+    return decrypt_blob(file_path.read_bytes(), ENCRYPTION_KEY)
 
 
 def save_profile_and_settings(user_id: str, profile_input: Dict[str, Any], settings_input: Dict[str, Any]):

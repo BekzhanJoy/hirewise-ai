@@ -38,6 +38,26 @@ local-data/db.json
 local-data/uploads/
 ```
 
+## Encryption
+
+Local storage is now encrypted automatically:
+
+- `local-data/db.json` is stored encrypted at rest.
+- Files inside `local-data/uploads/` are stored encrypted at rest.
+- The app creates a persistent key in `local-data/.secret.key` if `HIREWISE_ENCRYPTION_KEY` is not provided.
+
+If you want to control the key manually, start the backend with:
+
+```bash
+set HIREWISE_ENCRYPTION_KEY=your-own-secret
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Important:
+
+- Keep the same encryption key for future runs, otherwise existing local data cannot be decrypted.
+- Do not commit `local-data/` to git.
+
 ## How to restart the project
 
 ### Quick restart

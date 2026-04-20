@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_URL = 'http://localhost:8010'
+const DEFAULT_BACKEND_URL = 'http://localhost:8000'
 export const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   (typeof window !== 'undefined' ? DEFAULT_BACKEND_URL : DEFAULT_BACKEND_URL)
