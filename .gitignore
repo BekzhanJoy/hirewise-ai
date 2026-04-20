@@ -21,3 +21,4 @@ node-v*.tar.xz
 .cache/
 local-data/uploads/
 .next/
+local-data/
