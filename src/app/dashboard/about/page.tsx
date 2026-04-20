@@ -17,9 +17,9 @@ const features = [
 ];
 
 const teamMembers = [
-  { name: 'Sarah Chen', role: 'CEO & Co-Founder', bio: 'Recruitment leader focused on practical hiring workflows.', initials: 'SC' },
-  { name: 'Michael Rodriguez', role: 'CTO & Co-Founder', bio: 'Engineer building document and matching systems.', initials: 'MR' },
-  { name: 'Emily Watson', role: 'Head of Product', bio: 'Product manager focused on usability and simple processes.', initials: 'EW' },
+  { name: 'Lisnevskyi Vitalii', role: 'CEO & Co-Founder', bio: 'Recruitment leader focused on practical hiring workflows.', initials: 'LV' },
+  { name: 'Kuanysh Bekzhan', role: 'CTO & Co-Founder', bio: 'Engineer building document and matching systems.', initials: 'KB' },
+  { name: 'Yesbossynov Sanzhar', role: 'Head of Product', bio: 'Product manager focused on usability and simple processes.', initials: 'YS' },
 ];
 
 const milestones = [
