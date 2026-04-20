@@ -1,4 +1,14 @@
-const BACKEND_URL = typeof window !== 'undefined' ? 'http://localhost:8000' : 'http://localhost:8000'
+const DEFAULT_BACKEND_URL = 'http://localhost:8010'
+export const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (typeof window !== 'undefined' ? DEFAULT_BACKEND_URL : DEFAULT_BACKEND_URL)
+
+export function withBackendUrl(path: string): string {
+  if (!path) return BACKEND_URL
+  if (/^https?:\/\//i.test(path)) return path
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return `${BACKEND_URL}${normalized}`
+}
 
 export async function apiGet<T>(url: string): Promise<T> {
   const response = await fetch(`${BACKEND_URL}${url}`)

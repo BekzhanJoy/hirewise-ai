@@ -54,6 +54,8 @@ interface ScanResult {
   matchedKeywords: string[]
   missingSkills?: string[]
   summary?: string
+  llmExplanation?: string
+  jobDescription?: string
   skillScore?: number
   experienceScore?: number
   educationScore?: number
@@ -464,7 +466,9 @@ export default function UploadPage() {
                   <div className="text-sm text-muted-app">{result.fileType}</div>
                 </div>
 
-                {result.summary && <p className="text-sm text-muted-app leading-6">{result.summary}</p>}
+                {(result.llmExplanation || result.summary) && (
+                  <p className="text-sm text-muted-app leading-6">{result.llmExplanation || result.summary}</p>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="rounded-lg border border-app p-3">

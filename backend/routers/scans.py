@@ -1,9 +1,9 @@
 from typing import List, Optional, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from db import scan_resumes
+from db import scan_resumes, list_job_match_history
 
 router = APIRouter()
 
@@ -31,5 +31,13 @@ async def post_scans(req: ScanRequest):
         return {'results': results}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get('/scans/history')
+async def get_scans_history(userId: str = Query(..., description='User ID')):
+    try:
+        return {'runs': list_job_match_history(userId)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

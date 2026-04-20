@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { apiGet, apiSend } from '@/lib/local-api'
+import { apiGet, apiSend, withBackendUrl } from '@/lib/local-api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { FileText, File, Trash2, Search, FileArchive, RefreshCw, Download } from 'lucide-react'
+import { FileText, File, Trash2, Search, FileArchive, RefreshCw, Download, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppPreferences } from '@/components/AppPreferencesProvider'
 
@@ -26,7 +26,33 @@ interface Resume {
   file_size: number
   created_at: string
   best_match_score?: number
+  best_match_score_job_description?: number
+  best_match_score_keywords?: number
   resume_profile?: ResumeProfile
+}
+
+interface JobMatchResult {
+  id: string
+  resumeId: string
+  fileName: string
+  fileType: string
+  matchScore: number
+  matchedKeywords: string[]
+  missingSkills: string[]
+  summary?: string
+  llmExplanation?: string
+  skillScore: number
+  experienceScore: number
+  educationScore: number
+  contextScore: number
+  isBestMatch: boolean
+}
+
+interface JobMatchRun {
+  runId: string
+  createdAt: string
+  jobDescription: string
+  results: JobMatchResult[]
 }
 
 type SortOption = 'date_desc' | 'date_asc' | 'score_desc' | 'score_asc'
@@ -40,6 +66,7 @@ export default function LibraryPage() {
   const [sortBy, setSortBy] = useState<SortOption>('date_desc')
   const [isLoading, setIsLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [jobMatchRuns, setJobMatchRuns] = useState<JobMatchRun[]>([])
 
   const fetchResumes = async () => {
     if (!user?.id) return
@@ -47,6 +74,8 @@ export default function LibraryPage() {
     try {
       const payload = await apiGet<{ resumes: Resume[] }>(`/api/resumes?userId=${encodeURIComponent(user.id)}`)
       setResumes(payload.resumes)
+      const historyPayload = await apiGet<{ runs: JobMatchRun[] }>(`/api/scans/history?userId=${encodeURIComponent(user.id)}`)
+      setJobMatchRuns(historyPayload.runs || [])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load resumes')
     }
@@ -180,8 +209,11 @@ export default function LibraryPage() {
                 </div>
 
                 <div className="text-xs text-muted-app">{t('uploadedOn')}: {formatDate(resume.created_at)}</div>
-                {typeof resume.best_match_score === 'number' && (
-                  <div className="text-sm text-highlight">{t('bestScore')}: {resume.best_match_score}%</div>
+                {typeof resume.best_match_score_job_description === 'number' && (
+                  <div className="text-sm text-highlight">Best JD score: {resume.best_match_score_job_description}%</div>
+                )}
+                {typeof resume.best_match_score_keywords === 'number' && (
+                  <div className="text-sm text-muted-app">Best keyword score: {resume.best_match_score_keywords}%</div>
                 )}
 
                 {(resume.resume_profile?.skills?.length || resume.resume_profile?.education_level || typeof resume.resume_profile?.years_experience === 'number') && (
@@ -208,7 +240,7 @@ export default function LibraryPage() {
 
                 <div className="flex gap-2">
                   <a
-                    href={resume.file_url}
+                    href={withBackendUrl(resume.file_url)}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-surface-soft text-accent text-sm"
@@ -221,6 +253,63 @@ export default function LibraryPage() {
           ))}
         </div>
       )}
+
+      <div className="space-y-4">
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Sparkles className="w-6 h-6 text-highlight" />
+          Job Match History
+        </h2>
+        {jobMatchRuns.length === 0 ? (
+          <Card className="card-app border-app">
+            <CardContent className="p-6 text-muted-app">
+              No saved job-fit analyses yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {jobMatchRuns.map((run) => (
+              <Card key={run.runId} className="card-app border-app">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-muted-app">
+                      {new Date(run.createdAt).toLocaleString(language)}
+                    </div>
+                    <Badge variant="outline" className="border-app text-accent">
+                      {run.results.length} result(s)
+                    </Badge>
+                  </div>
+                  <div className="rounded-lg border border-app bg-surface-2 p-3">
+                    <p className="text-xs text-muted-app mb-2">Job Offer</p>
+                    <p className="text-sm text-white whitespace-pre-wrap leading-6">
+                      {run.jobDescription}
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {run.results.map((result) => (
+                      <div key={result.id} className="rounded-lg border border-app bg-surface-2 p-3 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-white font-medium">{result.fileName}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="border-app text-accent">
+                              Score: {result.matchScore}%
+                            </Badge>
+                            {result.isBestMatch ? (
+                              <Badge className="bg-accent-app text-on-accent">Best match</Badge>
+                            ) : null}
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-app leading-6">
+                          {result.llmExplanation || result.summary || 'No explanation available.'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

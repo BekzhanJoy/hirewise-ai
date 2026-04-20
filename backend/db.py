@@ -507,10 +507,21 @@ def list_resumes(user_id: str):
     results = []
     for resume in resumes:
         scans = [s for s in db['scan_results'] if s['resume_id'] == resume['id']]
-        best_match_score = max([s['match_score'] for s in scans], default=-1) if scans else None
+        job_description_scores = [s['match_score'] for s in scans if s.get('mode') == 'job_description']
+        keyword_scores = [s['match_score'] for s in scans if s.get('mode') == 'keywords']
+        best_match_score_job_description = max(job_description_scores) if job_description_scores else None
+        best_match_score_keywords = max(keyword_scores) if keyword_scores else None
+        # Keep backwards compatibility for existing UI consumers.
+        best_match_score = (
+            best_match_score_job_description
+            if best_match_score_job_description is not None
+            else best_match_score_keywords
+        )
         results.append({
             **resume,
             'best_match_score': best_match_score,
+            'best_match_score_job_description': best_match_score_job_description,
+            'best_match_score_keywords': best_match_score_keywords,
             'resume_profile': resume.get('resume_profile') or parse_resume_profile(resume.get('extracted_text', '')),
         })
     results.sort(key=lambda x: datetime.fromisoformat(x['created_at']), reverse=True)
@@ -572,25 +583,46 @@ def scan_resumes(user_id: str, keywords: Optional[List[str]] = None, job_descrip
                 if resume is None:
                     continue
 
-                score_pct = round(float(entry.get('score', 0.0)) * 100)
-                skill_pct = round(float(entry.get('coverage', 0.0)) * 100)
-                semantic_pct = round(float(entry.get('semantic', 0.0)) * 100)
+                legacy_analysis = analyze_job_fit(resume.get('extracted_text', ''), jd_text)
+
+                semantic_raw = float(entry.get('semantic', 0.0))
+                coverage_raw = float(entry.get('coverage', 0.0))
+                semantic_pct = round(semantic_raw * 100)
+                experience_pct = int(legacy_analysis.get('experience_score', 0) or 0)
+                education_pct = int(legacy_analysis.get('education_score', 0) or 0)
+                effective_coverage = coverage_raw
+
+                # If matcher coverage is too low/missing but legacy skill scoring has
+                # a useful value, use it consistently for both displayed Skills and
+                # final Score so users do not see contradictory metrics.
+                if effective_coverage <= 0 and legacy_analysis.get('skill_score') is not None:
+                    effective_coverage = max(0.0, min(1.0, float(legacy_analysis.get('skill_score', 0)) / 100.0))
+
+                skill_pct = round(effective_coverage * 100)
+                score_pct = round((0.65 * semantic_raw + 0.35 * effective_coverage) * 100)
+
+                matched_skills = entry.get('matched', []) or legacy_analysis.get('matched_skills', [])
+                missing_skills = entry.get('missing', []) or legacy_analysis.get('missing_skills', [])
+                llm_explanation = entry.get('explanation', '')
+                summary = llm_explanation or legacy_analysis.get('summary') or f"Overall suitability score: {score_pct}%."
 
                 record = {
                     'id': str(uuid4()),
                     'user_id': user_id,
                     'resume_id': resume['id'],
                     'mode': 'job_description',
+                    'job_description': jd_text,
                     'job_description_excerpt': jd_text[:500],
                     'match_score': score_pct,
-                    'matched_keywords': entry.get('matched', []),
+                    'matched_keywords': matched_skills,
                     'is_best_match': resume['id'] == best_resume_id,
+                    'llm_explanation': llm_explanation,
                     'analysis': {
-                        'summary': entry.get('explanation') or f"Overall suitability score: {score_pct}%.",
-                        'missing_skills': entry.get('missing', []),
+                        'summary': summary,
+                        'missing_skills': missing_skills,
                         'skill_score': skill_pct,
-                        'experience_score': 0,
-                        'education_score': 0,
+                        'experience_score': experience_pct,
+                        'education_score': education_pct,
                         'context_score': semantic_pct,
                         'resume_profile': resume.get('resume_profile') or parse_resume_profile(resume.get('extracted_text', '')),
                     },
@@ -603,12 +635,14 @@ def scan_resumes(user_id: str, keywords: Optional[List[str]] = None, job_descrip
                     'fileName': resume['file_name'],
                     'fileType': resume['file_type'],
                     'matchScore': score_pct,
-                    'matchedKeywords': entry.get('matched', []),
-                    'missingSkills': entry.get('missing', []),
-                    'summary': record['analysis']['summary'],
+                    'matchedKeywords': matched_skills,
+                    'missingSkills': missing_skills,
+                    'summary': summary,
+                    'jobDescription': jd_text,
+                    'llmExplanation': record['llm_explanation'],
                     'skillScore': skill_pct,
-                    'experienceScore': 0,
-                    'educationScore': 0,
+                    'experienceScore': experience_pct,
+                    'educationScore': education_pct,
                     'contextScore': semantic_pct,
                     'detectedSkills': record['analysis']['resume_profile'].get('skills', []),
                     'educationLevel': record['analysis']['resume_profile'].get('education_level'),
@@ -636,10 +670,12 @@ def scan_resumes(user_id: str, keywords: Optional[List[str]] = None, job_descrip
                 'user_id': user_id,
                 'resume_id': item['resume']['id'],
                 'mode': 'job_description',
+                'job_description': jd_text,
                 'job_description_excerpt': jd_text[:500],
                 'match_score': item['score'],
                 'matched_keywords': analysis['matched_skills'],
                 'is_best_match': item['resume']['id'] == best_resume_id,
+                'llm_explanation': '',
                 'analysis': analysis,
                 'created_at': now,
             }
@@ -653,6 +689,8 @@ def scan_resumes(user_id: str, keywords: Optional[List[str]] = None, job_descrip
                 'matchedKeywords': analysis['matched_skills'],
                 'missingSkills': analysis['missing_skills'],
                 'summary': analysis['summary'],
+                'jobDescription': jd_text,
+                'llmExplanation': '',
                 'skillScore': analysis['skill_score'],
                 'experienceScore': analysis['experience_score'],
                 'educationScore': analysis['education_score'],
@@ -727,6 +765,69 @@ def get_dashboard(user_id: str):
         },
         'recentScans': recent_scans,
     }
+
+
+def list_job_match_history(user_id: str):
+    db = read_db()
+    resumes_by_id = {
+        r['id']: {
+            'id': r['id'],
+            'file_name': r.get('file_name', ''),
+            'file_type': r.get('file_type', ''),
+            'created_at': r.get('created_at'),
+        }
+        for r in db['resumes']
+        if r.get('user_id') == user_id
+    }
+
+    job_scans = [
+        s for s in db['scan_results']
+        if s.get('user_id') == user_id and s.get('mode') == 'job_description'
+    ]
+    if not job_scans:
+        return []
+
+    runs: Dict[str, Dict[str, Any]] = {}
+    for scan in job_scans:
+        job_description = scan.get('job_description') or scan.get('job_description_excerpt') or ''
+        run_key = f"{scan.get('created_at', '')}::{job_description[:120]}"
+
+        if run_key not in runs:
+            runs[run_key] = {
+                'runId': run_key,
+                'createdAt': scan.get('created_at'),
+                'jobDescription': job_description,
+                'results': [],
+            }
+
+        analysis = scan.get('analysis') or {}
+        resume_ref = resumes_by_id.get(scan.get('resume_id'))
+        runs[run_key]['results'].append({
+            'id': scan.get('id'),
+            'resumeId': scan.get('resume_id'),
+            'fileName': (resume_ref or {}).get('file_name', 'Unknown resume'),
+            'fileType': (resume_ref or {}).get('file_type', ''),
+            'matchScore': scan.get('match_score', 0),
+            'matchedKeywords': scan.get('matched_keywords', []),
+            'missingSkills': analysis.get('missing_skills', []),
+            'summary': analysis.get('summary', ''),
+            'llmExplanation': scan.get('llm_explanation', ''),
+            'skillScore': analysis.get('skill_score', 0),
+            'experienceScore': analysis.get('experience_score', 0),
+            'educationScore': analysis.get('education_score', 0),
+            'contextScore': analysis.get('context_score', 0),
+            'isBestMatch': scan.get('is_best_match', False),
+        })
+
+    history = list(runs.values())
+    for run in history:
+        run['results'].sort(key=lambda x: x.get('matchScore', 0), reverse=True)
+
+    history.sort(
+        key=lambda x: datetime.fromisoformat(x.get('createdAt') or datetime.min.isoformat()),
+        reverse=True,
+    )
+    return history
 
 
 def read_stored_file(slug: List[str]):
