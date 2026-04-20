@@ -14,3 +14,10 @@ matcher/__pycache__
 # local env files
 .env*
 !.env.example
+.venv/
+node/
+node-v*.tar.xz
+.ollama/
+.cache/
+local-data/uploads/
+.next/

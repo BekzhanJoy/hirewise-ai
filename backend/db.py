@@ -21,10 +21,10 @@ from encryption import (
     load_or_create_key,
 )
 
-DATA_DIR = Path.cwd().parent.parent / 'local-data'
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT_DIR / 'local-data'
 UPLOADS_DIR = DATA_DIR / 'uploads'
 DB_FILE = DATA_DIR / 'db.json'
-ROOT_DIR = Path(__file__).resolve().parents[1]
 ENCRYPTION_KEY = load_or_create_key(DATA_DIR)
 STORAGE_READY = False
 
