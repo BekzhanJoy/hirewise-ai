@@ -3,6 +3,7 @@ import os
 import re
 import secrets
 import shutil
+import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 from uuid import uuid4
@@ -15,6 +16,15 @@ from pypdf import PdfReader
 DATA_DIR = Path.cwd().parent.parent / 'local-data'
 UPLOADS_DIR = DATA_DIR / 'uploads'
 DB_FILE = DATA_DIR / 'db.json'
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
+try:
+    from matcher.service import matcher_service  # type: ignore
+except Exception:
+    matcher_service = None
 
 STOPWORDS: Set[str] = {
     'a', 'an', 'and', 'the', 'to', 'of', 'for', 'in', 'on', 'with', 'as', 'at', 'by', 'or', 'from', 'is', 'are', 'be',
@@ -535,6 +545,80 @@ def scan_resumes(user_id: str, keywords: Optional[List[str]] = None, job_descrip
         jd_text = normalize_spaces(job_description or '')
         if not jd_text:
             raise ValueError('Job description is required')
+
+        if matcher_service is not None:
+            resume_records = [
+                {
+                    'id': resume['id'],
+                    'text': resume.get('extracted_text', ''),
+                    'file_name': resume.get('file_name', ''),
+                    'file_type': resume.get('file_type', ''),
+                    'resume_profile': resume.get('resume_profile', {}),
+                }
+                for resume in resumes
+            ]
+
+            ranked = matcher_service.rank(
+                job_text=jd_text,
+                resume_records=resume_records,
+                top_k=5,
+                explain=True,
+            )
+
+            best_resume_id = ranked[0]['resume_id'] if ranked else ''
+            saved = []
+            for entry in ranked:
+                resume = next((r for r in resumes if r['id'] == entry['resume_id']), None)
+                if resume is None:
+                    continue
+
+                score_pct = round(float(entry.get('score', 0.0)) * 100)
+                skill_pct = round(float(entry.get('coverage', 0.0)) * 100)
+                semantic_pct = round(float(entry.get('semantic', 0.0)) * 100)
+
+                record = {
+                    'id': str(uuid4()),
+                    'user_id': user_id,
+                    'resume_id': resume['id'],
+                    'mode': 'job_description',
+                    'job_description_excerpt': jd_text[:500],
+                    'match_score': score_pct,
+                    'matched_keywords': entry.get('matched', []),
+                    'is_best_match': resume['id'] == best_resume_id,
+                    'analysis': {
+                        'summary': entry.get('explanation') or f"Overall suitability score: {score_pct}%.",
+                        'missing_skills': entry.get('missing', []),
+                        'skill_score': skill_pct,
+                        'experience_score': 0,
+                        'education_score': 0,
+                        'context_score': semantic_pct,
+                        'resume_profile': resume.get('resume_profile') or parse_resume_profile(resume.get('extracted_text', '')),
+                    },
+                    'created_at': now,
+                }
+                db['scan_results'].append(record)
+                saved.append({
+                    'id': record['id'],
+                    'resumeId': resume['id'],
+                    'fileName': resume['file_name'],
+                    'fileType': resume['file_type'],
+                    'matchScore': score_pct,
+                    'matchedKeywords': entry.get('matched', []),
+                    'missingSkills': entry.get('missing', []),
+                    'summary': record['analysis']['summary'],
+                    'skillScore': skill_pct,
+                    'experienceScore': 0,
+                    'educationScore': 0,
+                    'contextScore': semantic_pct,
+                    'detectedSkills': record['analysis']['resume_profile'].get('skills', []),
+                    'educationLevel': record['analysis']['resume_profile'].get('education_level'),
+                    'yearsExperience': record['analysis']['resume_profile'].get('years_experience'),
+                    'isBestMatch': record['is_best_match'],
+                })
+
+            write_db(db)
+            saved.sort(key=lambda x: x['matchScore'], reverse=True)
+            return saved
 
         for resume in resumes:
             analysis = analyze_job_fit(resume.get('extracted_text', ''), jd_text)
